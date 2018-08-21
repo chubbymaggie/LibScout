@@ -119,17 +119,9 @@ public class LibraryIdentifier {
 		
 		// check stat file <stats-dir>/package-level1/package-level2/appName_appVersionCode.data
 		String statsFileName = stats.appFile.getName().replaceAll("\\.jar", "").replaceAll("\\.apk", "").replaceAll("\\.aar", "") + "_" + stats.manifest.getVersionCode();  // without file suffix
-		
-		List<String> ptoken = PackageUtils.parsePackage(stats.manifest.getPackageName());
-		File statsSubDir = null;
-		if (ptoken.size() > 0) {
-			if (ptoken.size() > 1)
-				statsSubDir = new File(ptoken.get(0) + File.separator + ptoken.get(1));
-			else
-				statsSubDir = new File(ptoken.get(0));
-		}
 
-		File statsFile = new File(CliOptions.statsDir + File.separator + (statsSubDir != null? statsSubDir + File.separator : "") + statsFileName  + FILE_EXT_SERIALIZED);
+		File statsSubDir = PackageUtils.packageToPath(stats.manifest.getPackageName());
+		File statsFile = new File(CliOptions.statsDir + File.separator + statsSubDir + File.separator + statsFileName  + FILE_EXT_SERIALIZED);
 
 		// if stat file already exists for this app, return
 		if (CliOptions.generateStats && statsFile.exists()) {
@@ -146,14 +138,12 @@ public class LibraryIdentifier {
 		createClassHierarchy();
 		
 		// generate app package tree and hash trees
-// TODO stats.appProfile?		
 		AppProfile appProfile = AppProfile.create(cha);
 		stats.pTree = appProfile.packageTree;
 		stats.appHashTrees = appProfile.hashTrees;
 
 		// fast scan (heuristic) - check if lib root package is in app
 		logger.info("= Scan for library root packages (heuristic) =");
-		stats.packageMatches = new HashSet<String>();
 		for (LibProfile profile: profiles) {
 			// check if library root package is present in app (for validation purposes)
 			String rootPackage = profile.packageTree.getRootPackage();
@@ -163,9 +153,11 @@ public class LibraryIdentifier {
 			if (rootPackage == null || ambiguousRootPackages.contains(rootPackage)) continue;
 			
 			boolean match = appProfile.packageTree.containsPackage(rootPackage);
-			if (match && stats.packageMatches.add(profile.description.name))
+			if (match && !stats.packageOnlyMatches.containsKey(profile.description.name)) {
+				stats.packageOnlyMatches.put(profile.description.name, rootPackage);
 				logger.info(Utils.INDENT + "- Found lib root package " + rootPackage + "  (" + profile.description.name + ")");
-		}		
+			}
+		}
 		logger.info("");
 		
 		
@@ -211,7 +203,7 @@ public class LibraryIdentifier {
 
 		// write app results to json
 		if (CliOptions.generateJSON) {
-			File jsonFile = new File(CliOptions.jsonDir + File.separator + (statsSubDir != null? statsSubDir + File.separator : "") + statsFileName  + FILE_EXT_JSON);
+			File jsonFile = new File(CliOptions.jsonDir + File.separator + statsSubDir + File.separator + statsFileName  + FILE_EXT_JSON);
 			Utils.obj2JsonFile(jsonFile, stats);
 			logger.info("Write app stats to JSON (dir: " + CliOptions.jsonDir + ")");
 		}
@@ -220,7 +212,7 @@ public class LibraryIdentifier {
 		if (CliOptions.generateStats) {
 			if (!stats.pMatches.isEmpty()) {
 				logger.info("Serialize app stats to disk (dir: " + CliOptions.statsDir + ")");
-				Utils.object2Disk(statsFile, new SerializableAppStats(stats));
+				Utils.object2Disk(statsFile, new SerializableAppStats(stats));  // TODO mv from java serialization to protobufs or remove w/o replacement
 			}
 		}
 		
@@ -796,10 +788,11 @@ public class LibraryIdentifier {
 		pm.loadManifestFile(appFile.getAbsolutePath());
 
 		logger.info("= Manifest Parser =");
-		logger.info(Utils.INDENT + "Package name: " + pm.getPackageName());
-		logger.info(Utils.INDENT + "Version code: " + pm.getVersionCode());
-		logger.info(Utils.INDENT + "minSdkVersion: " + pm.getMinSdkVersion());
-		logger.info(Utils.INDENT + "SharedUserId: " + (pm.getSharedUserId().isEmpty()? " - none -" : pm.getSharedUserId()));
+		logger.info(Utils.INDENT + "    Package name: " + pm.getPackageName());
+		logger.info(Utils.INDENT + "    Version code: " + pm.getVersionCode());
+		logger.info(Utils.INDENT + "   minSdkVersion: " + pm.getMinSdkVersion());
+		logger.info(Utils.INDENT + "targetSdkVersion: " + pm.getTargetSdkVersion());
+		logger.info(Utils.INDENT + "    SharedUserId: " + (pm.getSharedUserId().isEmpty()? " - none -" : pm.getSharedUserId()));
 
 		// library dependencies, e.g.
 		//  - com.google.android.maps

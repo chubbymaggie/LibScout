@@ -14,6 +14,7 @@
 
 package de.infsec.tpl.pkg;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,7 +39,7 @@ public class PackageUtils {
 		String[] struct = name.split("\\.");
 		List<String> result = new ArrayList<String>((List<String>)Arrays.asList(struct));
 		
-		if (includeClazz)
+		if (!includeClazz)
 			return result.subList(0, result.size()-1);  // exclude clazz Name
 		else
 			return result;
@@ -46,9 +47,17 @@ public class PackageUtils {
 
 	
 	public static List<String> parsePackage(String clazzName) {
-		return parsePackage(clazzName, true);
+		return parsePackage(clazzName, false);
 	}
 
+	/**
+	 * Transforms a package name com.foo.bar to a file path, i.e. com/foo/bar
+	 * @param packageName  the package name of the app
+	 * @return  a {@link File} including the package path
+	 */
+	public static File packageToPath (String packageName) {
+		return new File(Utils.join(parsePackage(packageName, true), File.separator));
+	}
 	
 	public static String getPackageName(IClass clazz) {
 		return Utils.join(parsePackage(clazz), ".");
@@ -79,7 +88,7 @@ public class PackageUtils {
 	}
 	
 	public static String getSubPackageOfDepth(String packageName, int depth) {
-		List<String> token = parsePackage(packageName, false);
+		List<String> token = parsePackage(packageName, true);  // TODO: recheck second arg
 		if (token.size()-1 >= depth)
 			return Utils.join(token.subList(0, depth), ".");
 		else
@@ -87,9 +96,9 @@ public class PackageUtils {
 	}
 	
 	/**
-	 * Tests relationship of package1 to package2. Packages must be provided without class.
-	 * @param packageName1
-	 * @param packageName2
+	 * Tests relationship of package1 to package2.
+	 * @param packageName1  package name without class
+	 * @param packageName2  package name without class
 	 * @return @{link RELATIONSHIP}
 	 */
 	public static RELATIONSHIP testRelationship(String packageName1, String packageName2) {
@@ -100,7 +109,7 @@ public class PackageUtils {
 			return RELATIONSHIP.PARENT;
 		else if (packageName2.startsWith(packageName1) && p2Depth > p1Depth)
 			return RELATIONSHIP.CHILD;
-		else if (p1Depth == p2Depth && Utils.join(parsePackage(packageName1, false).subList(0, p1Depth-1)).equals(Utils.join(parsePackage(packageName2, false).subList(0, p2Depth-1))))
+		else if (packageName1.equals(packageName2))
 			return RELATIONSHIP.SIBLING;
 		else
 			return RELATIONSHIP.UNRELATED;
